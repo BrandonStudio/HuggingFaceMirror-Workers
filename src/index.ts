@@ -76,7 +76,7 @@ export default {
 				const headers = new Headers(response.headers);
 				headers.set('Location', location_url.toString());
 
-				return new Response(response.body, {
+				return new Response(response.body, { // Does not modify body, although original hostname is kept
 					status: response.status,
 					statusText: response.statusText,
 					headers: headers,
