@@ -50,7 +50,7 @@ export default {
 			return new Response(response.body, {
 				status: response.status,
 				statusText: response.statusText,
-				headers: headers,
+				headers: convertHeadersToObject(headers),
 			});
 		} else {
 			// Handle root requests
@@ -59,7 +59,7 @@ export default {
 			request_to_upstream_url.hostname = UpstreamHost;
 
 			request_to_upstream = new Request(request_to_upstream_url, {
-				//redirect: 'manual', // Prevent auto re-execution
+				redirect: 'manual', // Prevent auto re-execution
 				headers: request.headers,
 				method: request.method,
 				body: request.body,
@@ -79,30 +79,26 @@ export default {
 				location_url.hostname = new_hostname;
 
 				const headers = cloneHeaders(response.headers);
-				headers['location'] = location_url.toString();
+				headers.set('Location', location_url.toString());
 
 				return new Response(response.body, { // Does not modify body, although original hostname is kept
 					status: response.status,
 					statusText: response.statusText,
-					headers: headers,
+					headers: convertHeadersToObject(headers),
 				});
 			} else {
 				// normal response
 				const headers = cloneHeaders(response.headers);
 
 				const l = response.headers.get('Content-Length');
-				if (!('x-linked-size' in headers)) {
-					headers['x-linked-size'] = l || '-1'; // Use compatible X-Linked-Size header for transformers, as Content-Length will be removed.
-				}
-				const etag = response.headers.get('ETag');
-				if (!('x-linked-etag' in headers) && etag) {
-					headers['x-linked-etag'] = etag; // Use compatible X-Linked-ETag header for transformers, as ETag will raise 'Invalid header name' error.
+				if (!headers.has('X-Linked-Size')) {
+					headers.set('X-Linked-Size', l || '-1'); // Use compatible X-Linked-Size header for transformers, as Content-Length will be removed.
 				}
 
 				return new Response(response.body, {
 					status: response.status,
 					statusText: response.statusText,
-					headers: headers,
+					headers: convertHeadersToObject(headers),
 				});
 			}
 		}
@@ -110,19 +106,20 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 function cloneHeaders(originalHeaders: Headers) {
-	let newHeaders: { [key: string]: string } = {};
+	let newHeaders = new Headers();
 
 	const exposableHeaders = originalHeaders.get('access-control-expose-headers');
 	if (exposableHeaders) {
-		for (const key of exposableHeaders.split(',')) {
+		for (let key of exposableHeaders.split(',')) {
+			key = key.trim();
 			const value = originalHeaders.get(key);
 			if (value) {
-				newHeaders[key] = value;
+				newHeaders.set(key, value);
 			}
 		}
 	} else {
 		for (const [key, value] of originalHeaders) {
-			newHeaders[key] = value;
+			newHeaders.set(key, value);
 		}
 	}
 	return newHeaders;
