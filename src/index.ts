@@ -91,7 +91,13 @@ export default {
 				const headers = cloneHeaders(response.headers);
 
 				const l = response.headers.get('Content-Length');
-				headers['x-linked-size'] = l || '-1'; // Use compatible X-Linked-Size header for transformers, as Content-Length will be removed.
+				if (!('x-linked-size' in headers)) {
+					headers['x-linked-size'] = l || '-1'; // Use compatible X-Linked-Size header for transformers, as Content-Length will be removed.
+				}
+				const etag = response.headers.get('ETag');
+				if (!('x-linked-etag' in headers) && etag) {
+					headers['x-linked-etag'] = etag; // Use compatible X-Linked-ETag header for transformers, as ETag will raise 'Invalid header name' error.
+				}
 
 				return new Response(response.body, {
 					status: response.status,
