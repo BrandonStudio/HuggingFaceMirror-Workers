@@ -67,33 +67,60 @@ export default {
 			if (response.status === 301 || response.status === 302) {
 				// redirection to cdn-lfs
 				const location = response.headers.get('Location')!; // Location header should exists
-				let location_url = new URL(location);
+				const location_url = new URL(location);
 				const location_url_hostname = location_url.hostname;
 				const cdn_prefix = location_url_hostname.split('.')[0];
 				const new_hostname = `${cdn_prefix}.${hostname}`;
 				location_url.hostname = new_hostname;
 
-				const headers = new Headers(response.headers);
+				const headers = cloneHeaders(response.headers);
 				headers.set('Location', location_url.toString());
 
 				return new Response(response.body, { // Does not modify body, although original hostname is kept
 					status: response.status,
 					statusText: response.statusText,
-					headers: headers,
+					headers: convertHeadersToObject(headers),
 				});
 			} else {
 				// normal response
+				const headers = cloneHeaders(response.headers);
+
 				const l = response.headers.get('Content-Length');
+				headers.set('X-Linked-Size', l || '-1'); // Use compatible X-Linked-Size header for transformers, as Content-Length will be removed.
 
 				return new Response(response.body, {
 					status: response.status,
 					statusText: response.statusText,
-					headers: {
-						...response.headers,
-						'X-Linked-Size': l || '-1', // Use compatible X-Linked-Size header for transformers, as Content-Length will be removed.
-					},
+					headers: convertHeadersToObject(headers),
 				});
 			}
 		}
 	},
 } satisfies ExportedHandler<Env>;
+
+function cloneHeaders(originalHeaders: Headers) {
+	let newHeaders = new Headers();
+
+	const exposableHeaders = originalHeaders.get('access-control-expose-headers');
+	if (exposableHeaders) {
+		for (const key of exposableHeaders.split(',')) {
+			const value = originalHeaders.get(key);
+			if (value) {
+				newHeaders.set(key, value);
+			}
+		}
+	} else {
+		for (const [key, value] of originalHeaders) {
+			newHeaders.set(key, value);
+		}
+	}
+	return newHeaders;
+}
+
+function convertHeadersToObject(headers: Headers) {
+	let headersObject: { [key: string]: string } = {};
+	for (const [key, value] of headers) {
+		headersObject[key] = value;
+	}
+	return headersObject;
+}
