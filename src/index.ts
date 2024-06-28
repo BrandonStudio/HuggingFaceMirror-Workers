@@ -59,7 +59,7 @@ export default {
 			request_to_upstream_url.hostname = UpstreamHost;
 
 			request_to_upstream = new Request(request_to_upstream_url, {
-				redirect: 'manual', // Prevent auto re-execution
+				//redirect: 'manual', // Prevent auto re-execution
 				headers: request.headers,
 				method: request.method,
 				body: request.body,
