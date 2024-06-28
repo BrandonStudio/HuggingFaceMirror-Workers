@@ -46,7 +46,12 @@ export default {
 			request_to_upstream.headers.set('Host', upstream_hostname);
 
 			const response = await fetch(request_to_upstream);
-			return response;
+			const headers = cloneHeaders(response.headers);
+			return new Response(response.body, {
+				status: response.status,
+				statusText: response.statusText,
+				headers: convertHeadersToObject(headers),
+			});
 		} else {
 			// Handle root requests
 
