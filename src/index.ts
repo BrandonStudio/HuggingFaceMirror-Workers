@@ -50,7 +50,7 @@ export default {
 			return new Response(response.body, {
 				status: response.status,
 				statusText: response.statusText,
-				headers: convertHeadersToObject(headers),
+				headers: headers,
 			});
 		} else {
 			// Handle root requests
@@ -59,7 +59,7 @@ export default {
 			request_to_upstream_url.hostname = UpstreamHost;
 
 			request_to_upstream = new Request(request_to_upstream_url, {
-				//redirect: 'manual', // Prevent auto re-execution
+				redirect: 'manual', // Prevent auto re-execution
 				headers: request.headers,
 				method: request.method,
 				body: request.body,
@@ -84,7 +84,7 @@ export default {
 				return new Response(response.body, { // Does not modify body, although original hostname is kept
 					status: response.status,
 					statusText: response.statusText,
-					headers: convertHeadersToObject(headers),
+					headers: headers,
 				});
 			} else {
 				// normal response
@@ -98,7 +98,7 @@ export default {
 				return new Response(response.body, {
 					status: response.status,
 					statusText: response.statusText,
-					headers: convertHeadersToObject(headers),
+					headers: headers,
 				});
 			}
 		}
@@ -107,28 +107,8 @@ export default {
 
 function cloneHeaders(originalHeaders: Headers) {
 	let newHeaders = new Headers();
-
-	const exposableHeaders = originalHeaders.get('access-control-expose-headers');
-	if (exposableHeaders) {
-		for (let key of exposableHeaders.split(',')) {
-			key = key.trim();
-			const value = originalHeaders.get(key);
-			if (value) {
-				newHeaders.set(key, value);
-			}
-		}
-	} else {
-		for (const [key, value] of originalHeaders) {
-			newHeaders.set(key, value);
-		}
+	for (const [key, value] of originalHeaders) {
+		newHeaders.set(key, value);
 	}
 	return newHeaders;
-}
-
-function convertHeadersToObject(headers: Headers) {
-	let headersObject: { [key: string]: string } = {};
-	for (const [key, value] of headers) {
-		headersObject[key] = value;
-	}
-	return headersObject;
 }
