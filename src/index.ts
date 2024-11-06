@@ -13,6 +13,7 @@
 
 const LfsPrefix = 'cdn-lfs';
 const UpstreamHost = 'huggingface.co';
+const UpstreamHost2 = 'hf.co';
 
 // Export a default object containing event handlers
 export default {
@@ -34,7 +35,7 @@ export default {
 			// Handle lfs requests
 
 			let cdn_prefix = hostname.split('.')[0];
-			let upstream_hostname = `${cdn_prefix}.${UpstreamHost}`;
+			let upstream_hostname = `${cdn_prefix}.${UpstreamHost2}`;
 			let request_to_upstream_url = new URL(url);
 			request_to_upstream_url.hostname = upstream_hostname;
 
