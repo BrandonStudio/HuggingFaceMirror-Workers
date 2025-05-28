@@ -1,16 +1,3 @@
-/**
- * Welcome to Cloudflare Workers! This is your first worker.
- *
- * - Run `npm run dev` in your terminal to start a development server
- * - Open a browser tab at http://localhost:8787/ to see your worker in action
- * - Run `npm run deploy` to publish your worker
- *
- * Bind resources to your worker in `wrangler.toml`. After adding bindings, a type definition for the
- * `Env` object can be regenerated with `npm run cf-typegen`.
- *
- * Learn more at https://developers.cloudflare.com/workers/
- */
-
 const LfsPrefix = 'cdn-lfs';
 const UpstreamHost = 'huggingface.co';
 const UpstreamHost2 = 'hf.co';
@@ -25,12 +12,15 @@ export default {
 		const hostname = url.hostname;
 		const headers = new Headers(request.headers);
 
+		const userAgent = headers.get('User-Agent')?.toLowerCase();
 		// Handle bad bots
-		if (/SemrushBot|MJ12bot/.test(headers.get('User-Agent') || '')) {
+		if (userAgent && !/transformers/.test(userAgent)) {
+			console.info(`Bad user-agent: ${userAgent}.`)
 			return new Response('Forbidden', { status: 403 });
 		}
 
 		let request_to_upstream: Request;
+		/** @deprecated handler for *.hf.co is deprecated. */
 		if (hostname.startsWith(LfsPrefix)) {
 			// Handle lfs requests
 
@@ -75,6 +65,12 @@ export default {
 				const location = response.headers.get('Location')!; // Location header should exists
 				const location_url = new URL(location);
 				const location_url_hostname = location_url.hostname;
+
+				if (location_url_hostname.endsWith('.' + UpstreamHost2)) {
+					// Do not handle hf.co redirection. Redirect as is.
+					return response;
+				}
+
 				const cdn_prefix = location_url_hostname.split('.')[0];
 				const new_hostname = `${cdn_prefix}.${hostname}`;
 				location_url.hostname = new_hostname;
