@@ -16,7 +16,7 @@ export default {
 		// Handle bad bots
 		if (userAgent && !/transformers/.test(userAgent)) {
 			console.info(`Bad user-agent: ${userAgent}.`)
-			return new Response('Forbidden', { status: 403 });
+			return new Response('Too many requests', { status: 429 });
 		}
 
 		let request_to_upstream: Request;
