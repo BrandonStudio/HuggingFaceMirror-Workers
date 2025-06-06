@@ -1,12 +1,17 @@
 const LfsPrefix = 'cdn-lfs';
+const proxyPrefix = 'hf-proxy';
 const UpstreamHost = 'huggingface.co';
 const UpstreamHost2 = 'hf.co';
+
+const badRequest = () => new Response('Bad Request', { status: 400 });
+const forbidden = () => new Response('Forbidden', { status: 403 });
 
 // Export a default object containing event handlers
 export default {
 	// The fetch handler is invoked when this worker receives a HTTP(S) request
 	// and should return a Response (optionally wrapped in a Promise)
 	async fetch(request, env, ctx): Promise<Response> {
+		const proxyAllHost = env.PROXY_ALL_HOST ? true : false;
 		// You'll find it helpful to parse the request.url string into a URL object. Learn more at https://developer.mozilla.org/en-US/docs/Web/API/URL
 		const url = new URL(request.url);
 		const hostname = url.hostname;
@@ -16,12 +21,40 @@ export default {
 		// Handle bad bots
 		if (userAgent && !/transformers/.test(userAgent)) {
 			console.info(`Bad user-agent: ${userAgent}.`)
-			return new Response('Too many requests', { status: 429 });
+			return forbidden();
 		}
 
 		let request_to_upstream: Request;
+		if (hostname.startsWith(proxyPrefix)) {
+			let location = url.searchParams.get('location');
+			if (!location) {
+				return badRequest();
+			}
+
+			try {
+				location = decodeURIComponent(location);
+				const location_url = new URL(location);
+				if (!location_url.hostname.endsWith('.' + UpstreamHost) && !location_url.hostname.endsWith('.' + UpstreamHost2)) {
+					// Only allow requests to huggingface.co and hf.co
+					return forbidden();
+				}
+			} catch (e) {
+				console.error(`Invalid location URL: ${location}`, e);
+				return badRequest();
+			}
+
+			const response = await fetch(location, {
+				headers,
+				method: request.method,
+				body: request.body,
+				redirect: 'manual',
+			});
+
+			// Assume we don't need another redirection.
+			return response;
+
 		/** @deprecated handler for *.hf.co is deprecated. */
-		if (hostname.startsWith(LfsPrefix)) {
+		} else if (hostname.startsWith(LfsPrefix)) {
 			// Handle lfs requests
 
 			let cdn_prefix = hostname.split('.')[0];
@@ -66,17 +99,17 @@ export default {
 				const location_url = new URL(location);
 				const location_url_hostname = location_url.hostname;
 
-				if (location_url_hostname.endsWith('.' + UpstreamHost2)) {
+				if (!proxyAllHost && location_url_hostname.endsWith('.' + UpstreamHost2)) {
 					// Do not handle hf.co redirection. Redirect as is.
 					return response;
 				}
 
-				const cdn_prefix = location_url_hostname.split('.')[0];
-				const new_hostname = `${cdn_prefix}.${hostname}`;
-				location_url.hostname = new_hostname;
+				const encoded_url = encodeURIComponent(location);
+				const new_hostname = `${proxyPrefix}.${hostname}`;
+				const new_url = `https://${new_hostname}/?location=${encoded_url}`;
 
 				const headers = cloneHeaders(response.headers);
-				headers.set('Location', location_url.toString());
+				headers.set('Location', new_url);
 
 				return new Response(response.body, { // Does not modify body, although original hostname is kept
 					status: response.status,
@@ -100,7 +133,7 @@ export default {
 			}
 		}
 	},
-} satisfies ExportedHandler<Env>;
+} satisfies ExportedHandler<Env & Record<string, string | undefined>>;
 
 function cloneHeaders(originalHeaders: Headers) {
 	let newHeaders = new Headers();
