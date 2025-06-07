@@ -1,3 +1,21 @@
+/**
+ * @license Apache-2.0
+ *
+ * Copyright 2024-2025 BrandonStudio.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 const proxyPrefix = 'hf-proxy';
 const UpstreamHost = 'huggingface.co';
 const UpstreamHost2 = 'hf.co';
@@ -11,13 +29,10 @@ const truthy = (v?: string) => {
 const badRequest = () => new Response('Bad Request', { status: 400 });
 const forbidden = () => new Response('Forbidden', { status: 403 });
 
-// Export a default object containing event handlers
 export default {
-	// The fetch handler is invoked when this worker receives a HTTP(S) request
-	// and should return a Response (optionally wrapped in a Promise)
 	async fetch(request, env, ctx): Promise<Response> {
 		const proxyAllHost = truthy(env.PROXY_ALL_HOST);
-		// You'll find it helpful to parse the request.url string into a URL object. Learn more at https://developer.mozilla.org/en-US/docs/Web/API/URL
+
 		const url = new URL(request.url);
 		const hostname = url.hostname;
 		const headers = new Headers(request.headers);
