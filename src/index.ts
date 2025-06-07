@@ -1,7 +1,12 @@
-const LfsPrefix = 'cdn-lfs';
 const proxyPrefix = 'hf-proxy';
 const UpstreamHost = 'huggingface.co';
 const UpstreamHost2 = 'hf.co';
+
+const truthy = (v?: string) => {
+	if (!v) return false;
+	v = v.trim().toLowerCase();
+	return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+};
 
 const badRequest = () => new Response('Bad Request', { status: 400 });
 const forbidden = () => new Response('Forbidden', { status: 403 });
@@ -11,7 +16,7 @@ export default {
 	// The fetch handler is invoked when this worker receives a HTTP(S) request
 	// and should return a Response (optionally wrapped in a Promise)
 	async fetch(request, env, ctx): Promise<Response> {
-		const proxyAllHost = env.PROXY_ALL_HOST ? true : false;
+		const proxyAllHost = truthy(env.PROXY_ALL_HOST);
 		// You'll find it helpful to parse the request.url string into a URL object. Learn more at https://developer.mozilla.org/en-US/docs/Web/API/URL
 		const url = new URL(request.url);
 		const hostname = url.hostname;
@@ -52,30 +57,6 @@ export default {
 
 			// Assume we don't need another redirection.
 			return response;
-
-		/** @deprecated handler for *.hf.co is deprecated. */
-		} else if (hostname.startsWith(LfsPrefix)) {
-			// Handle lfs requests
-
-			let cdn_prefix = hostname.split('.')[0];
-			let upstream_hostname = `${cdn_prefix}.${UpstreamHost2}`;
-			let request_to_upstream_url = new URL(url);
-			request_to_upstream_url.hostname = upstream_hostname;
-
-			request_to_upstream = new Request(request_to_upstream_url, {
-				headers: request.headers,
-				method: request.method,
-				body: request.body,
-			});
-			request_to_upstream.headers.set('Host', upstream_hostname);
-
-			const response = await fetch(request_to_upstream);
-			const headers = cloneHeaders(response.headers);
-			return new Response(response.body, {
-				status: response.status,
-				statusText: response.statusText,
-				headers: headers,
-			});
 		} else {
 			// Handle root requests
 
