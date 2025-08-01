@@ -39,7 +39,7 @@ export default {
 
 		const userAgent = headers.get('User-Agent')?.toLowerCase();
 		// Handle bad bots
-		if (userAgent && !/transformers/.test(userAgent)) {
+		if (userAgent && !/(transformers|hf_hub)/.test(userAgent)) {
 			console.info(`Bad user-agent: ${userAgent}.`)
 			return forbidden();
 		}
