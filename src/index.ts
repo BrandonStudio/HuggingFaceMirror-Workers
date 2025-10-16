@@ -31,6 +31,8 @@ const forbidden = () => new Response('Forbidden', { status: 403 });
 
 export default {
 	async fetch(request, env, ctx): Promise<Response> {
+		console.log(`Handling request ${request.method} ${request.url}`);
+
 		const proxyAllHost = truthy(env.PROXY_ALL_HOST);
 
 		const url = new URL(request.url);
@@ -91,7 +93,10 @@ export default {
 
 			if (response.status === 301 || response.status === 302) {
 				// redirection to cdn-lfs
-				const location = response.headers.get('Location')!; // Location header should exists
+				const location = response.headers.get('Location');
+				if (!location) {
+					throw new Error('Redirection without Location header');
+				}
 				const location_url = new URL(location);
 				const location_url_hostname = location_url.hostname;
 
@@ -106,6 +111,9 @@ export default {
 
 				const headers = cloneHeaders(response.headers);
 				headers.set('Location', new_url);
+				if (headers.has('Link')) {
+					headers.delete('Link'); // Remove Link header for now. TODO: handling xet_auth
+				}
 
 				return new Response(response.body, { // Does not modify body, although original hostname is kept
 					status: response.status,
@@ -114,14 +122,16 @@ export default {
 				});
 			} else {
 				// normal response
+				const responseBuffer = await response.arrayBuffer();
 				const headers = cloneHeaders(response.headers);
 
 				const l = response.headers.get('Content-Length');
 				if (!headers.has('X-Linked-Size')) {
-					headers.set('X-Linked-Size', l || '-1'); // Use compatible X-Linked-Size header for transformers, as Content-Length will be removed.
+					// Use compatible X-Linked-Size header for transformers, in case Content-Length is missing.
+					headers.set('X-Linked-Size', l || responseBuffer.byteLength.toString());
 				}
 
-				return new Response(response.body, {
+				return new Response(responseBuffer, {
 					status: response.status,
 					statusText: response.statusText,
 					headers: headers,
