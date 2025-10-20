@@ -17,7 +17,7 @@ jobs:
           python -m pip install huggingface_hub[cli] transformers
       - name: Download a model
         env:
-          HF_ENDPOINT: ${{ env.HF_ENDPOINT }}
+          HF_ENDPOINT: ${{ secrets.HF_ENDPOINT }}
           MODEL_ID: 'Qwen/Qwen3-4B'
           FORCE_COLOR: '1'
           CLICOLOR_FORCE: '1'
