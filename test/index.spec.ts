@@ -70,12 +70,18 @@ describe('Tests with fetch-mock', () => {
       fetchMock
         .get(new URL(location).origin)
         .intercept({ path: '/model' })
-        .reply(200, 'Upstream response');
+        .reply(200, 'Upstream response', {
+          headers: {
+            'Custom-Header': 'custom-value',
+          },
+        });
 
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
       await waitOnExecutionContext(ctx);
       expect(response.status).toBe(200);
+      const headers = response.headers;
+      expect(headers.get('Custom-Header')).toBe('custom-value');
       expect(await response.text()).toBe('Upstream response');
     });
   });
@@ -94,12 +100,18 @@ describe('Tests with fetch-mock', () => {
         .get(new URL(fileUrl).origin)
         .intercept({ path: '/files/README.md' })
         .replyContentLength()
-        .reply(200, 'This is a README file.');
+        .reply(200, 'This is a README file.', {
+          headers: {
+            'Custom-Header': 'custom-value',
+          },
+        });
 
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
       await waitOnExecutionContext(ctx);
       expect(response.status).toBe(200);
+      const headers = response.headers;
+      expect(headers.get('Custom-Header')).toBe('custom-value');
       expect(await response.text()).toBe('This is a README file.');
       expect(response.headers.get('X-Linked-Size')).toBe('22');
     });
@@ -120,12 +132,20 @@ describe('Tests with fetch-mock', () => {
           accessToken: 'some-token',
           casUrl: `https://cdn-lfs.${UpstreamHost2}/some-path`,
           exp: '124',
-        } satisfies XetTokenResponse, { headers: { 'Content-Type': 'application/json' } });
+        } satisfies XetTokenResponse, {
+          headers: {
+            'Content-Type': 'application/json',
+            'Custom-Header': 'custom-value',
+          },
+        });
 
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
       await waitOnExecutionContext(ctx);
       expect(response.status).toBe(200);
+      const headers = response.headers;
+      expect(headers.get('Content-Type')).toBe('application/json');
+      expect(headers.get('Custom-Header')).toBe('custom-value');
       const json = await response.json() as XetTokenResponse;
       expect(json.accessToken).toBe('some-token');
       expect(json.casUrl).toBe(`https://${proxyPrefix}.example.com/?location=${encodeURIComponent(`https://cdn-lfs.${UpstreamHost2}/some-path`)}`);
@@ -144,7 +164,12 @@ describe('Tests with fetch-mock', () => {
         fetchMock
           .get(new URL(`https://${UpstreamHost}/models/redirect-hf`).origin)
           .intercept({ path: '/models/redirect-hf' })
-          .reply(302, '', { headers: { Location: redirectUrl } });
+          .reply(302, '', {
+            headers: {
+              Location: redirectUrl,
+              'Custom-Header': 'custom-value',
+            },
+          });
 
         const ctx = createExecutionContext();
         const response = await worker.fetch(request, {
@@ -152,7 +177,9 @@ describe('Tests with fetch-mock', () => {
         } as typeof env, ctx);
         await waitOnExecutionContext(ctx);
         expect(response.status).toBe(302);
-        expect(response.headers.get('Location')).toBe(redirectUrl);
+        const headers = response.headers;
+        expect(headers.get('Location')).toBe(redirectUrl);
+        expect(headers.get('Custom-Header')).toBe('custom-value');
       });
 
       it('should redirect to proxy host if PROXY_ALL_HOST is true', async () => {
@@ -167,7 +194,12 @@ describe('Tests with fetch-mock', () => {
         fetchMock
           .get(new URL(`https://${UpstreamHost}/models/redirect-hf`).origin)
           .intercept({ path: '/models/redirect-hf' })
-          .reply(302, '', { headers: { Location: redirectUrl } });
+          .reply(302, '', {
+            headers: {
+              Location: redirectUrl,
+              'Custom-Header': 'custom-value',
+            },
+          });
 
         const ctx = createExecutionContext();
         const response = await worker.fetch(request, {
@@ -175,8 +207,10 @@ describe('Tests with fetch-mock', () => {
         } as typeof env, ctx);
         await waitOnExecutionContext(ctx);
         expect(response.status).toBe(302);
-        const location = response.headers.get('Location');
+        const headers = response.headers;
+        const location = headers.get('Location');
         expect(location).toBe(`https://${proxyPrefix}.example.com/?location=${encodeURIComponent(redirectUrl)}`);
+        expect(headers.get('Custom-Header')).toBe('custom-value');
       });
 
       it('should handle Link header when PROXY_ALL_HOST is true', async () => {

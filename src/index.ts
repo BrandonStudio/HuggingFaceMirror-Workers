@@ -129,11 +129,14 @@ export default {
       } else if (request_to_upstream_url.pathname.includes('/xet-read-token/')) {
         // special handling for xet-read-token, which returns a JSON response
         const tokenResponse = await response.json() as XetTokenResponse;
+        const headers2 = cloneHeaders(response.headers);
         tokenResponse['casUrl'] = replaceUrl2(tokenResponse['casUrl'], hostname);
+        headers2.set('Content-Type', 'application/json');
+        headers2.delete('Content-Length');
         return new Response(JSON.stringify(tokenResponse), {
           status: response.status,
           statusText: response.statusText,
-          headers: headers,
+          headers: headers2,
         });
       } else {
         // normal response
