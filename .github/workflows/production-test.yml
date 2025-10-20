@@ -26,7 +26,7 @@ jobs:
 
           echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
 
-          sudo systemctl start dnsmasq
+          sudo service dnsmasq start
 
           echo "Testing DNS blocking:"
           nslookup huggingface.co || echo "✓ huggingface.co blocked"
