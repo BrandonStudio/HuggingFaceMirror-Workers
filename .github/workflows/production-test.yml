@@ -25,8 +25,12 @@ jobs:
           echo "server=${CURRENT_DNS:-8.8.8.8}" | sudo tee -a /etc/dnsmasq.conf
           echo "address=/huggingface.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
           echo "address=/.huggingface.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/huggingface.co/::" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/.huggingface.co/::" | sudo tee -a /etc/dnsmasq.conf
           echo "address=/hf.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
           echo "address=/.hf.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/hf.co/::" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/.hf.co/::" | sudo tee -a /etc/dnsmasq.conf
 
           echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
 
@@ -45,12 +49,13 @@ jobs:
           python -m pip install huggingface_hub[cli] transformers
       - name: Download a model
         env:
-          HF_ENDPOINT: ${{ secrets.HF_ENDPOINT }}
+          HF_ENDPOINT: https://${{ secrets.HF_ENDPOINT }}
+          ENDPOINT: ${{ secrets.HF_ENDPOINT }}
           MODEL_ID: 'Qwen/Qwen3-4B'
           FORCE_COLOR: '1'
           CLICOLOR_FORCE: '1'
           PYTHONUNBUFFERED: '1'
         run: |
           hf download $MODEL_ID \
-            > >(sed -u "s|${{ env.HF_ENDPOINT }}|ENDPOINT|g") \
-            2> >(sed -u "s|${{ env.HF_ENDPOINT }}|ENDPOINT|g" >&2)
+            > >(sed -u "s|${{ env.ENDPOINT }}|ENDPOINT|g") \
+            2> >(sed -u "s|${{ env.ENDPOINT }}|ENDPOINT|g" >&2)
