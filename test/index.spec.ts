@@ -124,18 +124,23 @@ describe('Tests with fetch-mock', () => {
       });
 
       const tokenUrl = `https://${UpstreamHost}/path/xet-read-token/some-id`;
+      const casUrl = `https://cdn-lfs.${UpstreamHost2}/some-path`;
+      const expectedCasUrl = `https://${proxyPrefix}.example.com/?location=${encodeURIComponent(casUrl)}`;
 
       fetchMock
         .get(new URL(tokenUrl).origin)
         .intercept({ path: '/path/xet-read-token/some-id' })
         .reply(200, {
           accessToken: 'some-token',
-          casUrl: `https://cdn-lfs.${UpstreamHost2}/some-path`,
+          casUrl: casUrl,
           exp: '124',
         } satisfies XetTokenResponse, {
           headers: {
             'Content-Type': 'application/json',
             'Custom-Header': 'custom-value',
+            'X-Xet-Cas-Url': casUrl,
+            'X-Xet-Token-Expiration': '124',
+            'X-Xet-Access-Token': 'some-token',
           },
         });
 
@@ -146,9 +151,12 @@ describe('Tests with fetch-mock', () => {
       const headers = response.headers;
       expect(headers.get('Content-Type')).toBe('application/json');
       expect(headers.get('Custom-Header')).toBe('custom-value');
+      expect(headers.get('X-Xet-Cas-Url')).toBe(expectedCasUrl);
+      expect(headers.get('X-Xet-Token-Expiration')).toBe('124');
+      expect(headers.get('X-Xet-Access-Token')).toBe('some-token');
       const json = await response.json() as XetTokenResponse;
       expect(json.accessToken).toBe('some-token');
-      expect(json.casUrl).toBe(`https://${proxyPrefix}.example.com/?location=${encodeURIComponent(`https://cdn-lfs.${UpstreamHost2}/some-path`)}`);
+      expect(json.casUrl).toBe(expectedCasUrl);
     });
 
     describe('Redirection handling', () => {

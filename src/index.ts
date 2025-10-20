@@ -131,6 +131,7 @@ export default {
         const tokenResponse = await response.json() as XetTokenResponse;
         const headers2 = cloneHeaders(response.headers);
         tokenResponse['casUrl'] = replaceUrl2(tokenResponse['casUrl'], hostname);
+        headers2.set('X-Xet-Cas-Url', replaceUrl2(headers2.get('X-Xet-Cas-Url') || tokenResponse['casUrl'], hostname));
         headers2.set('Content-Type', 'application/json');
         headers2.delete('Content-Length');
         return new Response(JSON.stringify(tokenResponse), {
