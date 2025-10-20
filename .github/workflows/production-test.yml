@@ -16,9 +16,13 @@ jobs:
       - name: Block HuggingFace domains with dnsmasq
         if: ${{ env.PROXY_ALL_HOST }} == '1'
         run: |
+          CURRENT_DNS=$(resolvectl status | grep "DNS Servers" | awk '{print $3}' | head -n 1)
+          echo "Current DNS: $CURRENT_DNS"
+
           sudo apt-get update
           sudo apt-get install -y dnsmasq
 
+          echo "server=${CURRENT_DNS:-8.8.8.8}" | sudo tee -a /etc/dnsmasq.conf
           echo "address=/huggingface.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
           echo "address=/.huggingface.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
           echo "address=/hf.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
@@ -27,7 +31,7 @@ jobs:
           echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
 
           sudo systemctl stop systemd-resolved
-          sudo systemctl start dnsmasq || journalctl -u dnsmasq
+          sudo systemctl start dnsmasq
 
           echo "Testing DNS blocking:"
           nslookup huggingface.co || echo "✓ huggingface.co blocked"
