@@ -16,135 +16,182 @@
  * limitations under the License.
  */
 
-const proxyPrefix = 'hf-proxy';
-const UpstreamHost = 'huggingface.co';
-const UpstreamHost2 = 'hf.co';
+export const proxyPrefix = 'hf-proxy';
+export const UpstreamHost = 'huggingface.co';
+export const UpstreamHost2 = 'hf.co';
 
-const truthy = (v?: string) => {
-	if (!v) return false;
-	v = v.trim().toLowerCase();
-	return v === 'true' || v === '1' || v === 'yes' || v === 'on';
+export type XetTokenResponse = {
+  casUrl: string;
+  exp: string;
+  accessToken: string;
+};
+
+export const truthy = (v?: string) => {
+  if (!v) return false;
+  v = v.trim().toLowerCase();
+  return v === 'true' || v === '1' || v === 'yes' || v === 'on';
 };
 
 const badRequest = () => new Response('Bad Request', { status: 400 });
 const forbidden = () => new Response('Forbidden', { status: 403 });
 
 export default {
-	async fetch(request, env, ctx): Promise<Response> {
-		console.log(`Handling request ${request.method} ${request.url}`);
+  async fetch(request, env, ctx): Promise<Response> {
+    console.log(`Handling request ${request.method} ${request.url}`);
 
-		const proxyAllHost = truthy(env.PROXY_ALL_HOST);
+    const proxyAllHost = truthy(env.PROXY_ALL_HOST);
 
-		const url = new URL(request.url);
-		const hostname = url.hostname;
-		const headers = new Headers(request.headers);
+    const url = new URL(request.url);
+    const hostname = url.hostname;
+    const headers = new Headers(request.headers);
 
-		const userAgent = headers.get('User-Agent')?.toLowerCase();
-		// Handle bad bots
-		if (userAgent && !/(transformers|hf_hub)/.test(userAgent)) {
-			console.info(`Bad user-agent: ${userAgent}.`)
-			return forbidden();
-		}
+    const userAgent = headers.get('User-Agent')?.toLowerCase();
+    // Handle bad bots
+    if (userAgent && !/(transformers|hf_hub)/.test(userAgent)) {
+      console.info(`Bad user-agent: ${userAgent}.`)
+      return forbidden();
+    }
 
-		let request_to_upstream: Request;
-		if (hostname.startsWith(proxyPrefix)) {
-			let location = url.searchParams.get('location');
-			if (!location) {
-				return badRequest();
-			}
+    let request_to_upstream: Request;
+    if (hostname.startsWith(proxyPrefix)) {
+      let location = url.searchParams.get('location');
+      if (!location) {
+        return badRequest();
+      }
 
-			try {
-				location = decodeURIComponent(location);
-				const location_url = new URL(location);
-				if (!location_url.hostname.endsWith('.' + UpstreamHost) && !location_url.hostname.endsWith('.' + UpstreamHost2)) {
-					// Only allow requests to huggingface.co and hf.co
-					return forbidden();
-				}
-			} catch (e) {
-				console.error(`Invalid location URL: ${location}`, e);
-				return badRequest();
-			}
+      try {
+        location = decodeURIComponent(location);
+        const location_url = new URL(location);
+        if (!location_url.hostname.endsWith('.' + UpstreamHost) && !location_url.hostname.endsWith('.' + UpstreamHost2)) {
+          // Only allow requests to huggingface.co and hf.co
+          return forbidden();
+        }
+      } catch (e) {
+        console.error(`Invalid location URL: ${location}`, e);
+        return badRequest();
+      }
 
-			const response = await fetch(location, {
-				headers,
-				method: request.method,
-				body: request.body,
-				redirect: 'manual',
-			});
+      const response = await fetch(location, {
+        headers,
+        method: request.method,
+        body: request.body,
+        redirect: 'manual',
+      });
 
-			// Assume we don't need another redirection.
-			return response;
-		} else {
-			// Handle root requests
+      // Assume we don't need another redirection.
+      return response;
+    } else {
+      // Handle root requests
 
-			let request_to_upstream_url = new URL(url);
-			request_to_upstream_url.hostname = UpstreamHost;
+      let request_to_upstream_url = new URL(url);
+      request_to_upstream_url.hostname = UpstreamHost;
 
-			request_to_upstream = new Request(request_to_upstream_url, {
-				redirect: 'manual', // Prevent auto re-execution
-				headers: request.headers,
-				method: request.method,
-				body: request.body,
-			});
-			request_to_upstream.headers.set('Host', UpstreamHost);
-			request_to_upstream.headers.set('Accept-Encoding', 'identity'); // Get Content-Length header
+      request_to_upstream = new Request(request_to_upstream_url, {
+        redirect: 'manual', // Prevent auto re-execution
+        headers: request.headers,
+        method: request.method,
+        body: request.body,
+      });
+      request_to_upstream.headers.set('Host', UpstreamHost);
+      request_to_upstream.headers.set('Accept-Encoding', 'identity'); // Get Content-Length header
 
-			const response = await fetch(request_to_upstream);
+      const response = await fetch(request_to_upstream);
 
-			if (response.status === 301 || response.status === 302) {
-				// redirection to cdn-lfs
-				const location = response.headers.get('Location');
-				if (!location) {
-					throw new Error('Redirection without Location header');
-				}
-				const location_url = new URL(location);
-				const location_url_hostname = location_url.hostname;
+      if (response.status === 301 || response.status === 302) {
+        // redirection to cdn-lfs
+        const location = response.headers.get('Location');
+        if (!location) {
+          throw new Error('Redirection without Location header');
+        }
+        const location_url = new URL(location);
+        const location_url_hostname = location_url.hostname;
 
-				if (!proxyAllHost && location_url_hostname.endsWith('.' + UpstreamHost2)) {
-					// Do not handle hf.co redirection. Redirect as is.
-					return response;
-				}
+        if (!proxyAllHost && location_url_hostname.endsWith('.' + UpstreamHost2)) {
+          // Do not handle hf.co redirection. Redirect as is.
+          return response;
+        }
 
-				const encoded_url = encodeURIComponent(location);
-				const new_hostname = `${proxyPrefix}.${hostname}`;
-				const new_url = `https://${new_hostname}/?location=${encoded_url}`;
+        const encoded_url = encodeURIComponent(location);
+        const new_hostname = `${proxyPrefix}.${hostname}`;
+        const new_url = `https://${new_hostname}/?location=${encoded_url}`;
 
-				const headers = cloneHeaders(response.headers);
-				headers.set('Location', new_url);
-				if (headers.has('Link')) {
-					headers.delete('Link'); // Remove Link header for now. TODO: handling xet_auth
-				}
+        const headers = cloneHeaders(response.headers);
+        headers.set('Location', new_url);
+        if (headers.has('Link')) {
+          headers.set('Link', processLinkHeader(headers.get('Link')!, hostname));
+        }
 
-				return new Response(response.body, { // Does not modify body, although original hostname is kept
-					status: response.status,
-					statusText: response.statusText,
-					headers: headers,
-				});
-			} else {
-				// normal response
-				const responseBuffer = await response.arrayBuffer();
-				const headers = cloneHeaders(response.headers);
+        return new Response(response.body, { // Does not modify body, although original hostname is kept
+          status: response.status,
+          statusText: response.statusText,
+          headers: headers,
+        });
+      } else if (request_to_upstream_url.pathname.includes('/xet-read-token/')) {
+        // special handling for xet-read-token, which returns a JSON response
+        const tokenResponse = await response.json() as XetTokenResponse;
+        tokenResponse['casUrl'] = replaceUrl2(tokenResponse['casUrl'], hostname);
+        return new Response(JSON.stringify(tokenResponse), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: headers,
+        });
+      } else {
+        // normal response
+        const responseBuffer = await response.arrayBuffer();
+        const headers = cloneHeaders(response.headers);
 
-				const l = response.headers.get('Content-Length');
-				if (!headers.has('X-Linked-Size')) {
-					// Use compatible X-Linked-Size header for transformers, in case Content-Length is missing.
-					headers.set('X-Linked-Size', l || responseBuffer.byteLength.toString());
-				}
+        const l = response.headers.get('Content-Length');
+        if (!headers.has('X-Linked-Size')) {
+          // Use compatible X-Linked-Size header for transformers, in case Content-Length is missing.
+          headers.set('X-Linked-Size', l || responseBuffer.byteLength.toString());
+        }
 
-				return new Response(responseBuffer, {
-					status: response.status,
-					statusText: response.statusText,
-					headers: headers,
-				});
-			}
-		}
-	},
-} satisfies ExportedHandler<Env & Record<string, string | undefined>>;
+        return new Response(responseBuffer, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: headers,
+        });
+      }
+    }
+  },
+} satisfies ExportedHandler<Env>;
 
-function cloneHeaders(originalHeaders: Headers) {
-	let newHeaders = new Headers();
-	for (const [key, value] of originalHeaders) {
-		newHeaders.set(key, value);
-	}
-	return newHeaders;
+export function cloneHeaders(originalHeaders: Headers) {
+  let newHeaders = new Headers();
+  for (const [key, value] of originalHeaders) {
+    newHeaders.set(key, value);
+  }
+  return newHeaders;
+}
+
+export function replaceUrl1(url: string, hostname: string) {
+  const parsedUrl = new URL(url);
+  parsedUrl.hostname = hostname;
+  return parsedUrl;
+}
+
+export function replaceUrl2(url: string, hostname: string) {
+  const encodedUrl = encodeURIComponent(url);
+  const newHostname = `${proxyPrefix}.${hostname}`;
+  return `https://${newHostname}/?location=${encodedUrl}`;
+}
+
+export function processLinkHeader(linkHeader: string, hostname: string) {
+  const regex = /<(https?:\/\/[^>]+)>/g;
+  return linkHeader.replace(regex, (match, url) => {
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.hostname === UpstreamHost) {
+        return `<${replaceUrl1(url, hostname).href}>`;
+      }
+      if (parsedUrl.hostname.endsWith('.' + UpstreamHost2)) {
+        return `<${replaceUrl2(url, hostname)}>`;
+      } else {
+        return match; // Do not modify
+      }
+    } catch (e) {
+      console.error(`Invalid URL in Link header: ${url}`, e);
+      return match; // Do not modify
+    }
+  });
 }

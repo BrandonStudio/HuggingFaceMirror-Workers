@@ -6,12 +6,18 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "start": "wrangler dev",
+    "test": "vitest --config vitest.worker.config.mts",
+    "test:unit": "vitest --config vitest.unit.config.mts",
+    "test:worker": "vitest --config vitest.worker.config.mts",
+    "test:all": "vitest --config vitest.unit.config.mts && vitest --config vitest.worker.config.mts",
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.9.13",
     "@cloudflare/workers-types": "^4.20250528.0",
     "itty-router": "^3.0.12",
     "typescript": "^5.4.5",
+    "vitest": "^3.2.4",
     "wrangler": "^4.17.0"
   }
 }
