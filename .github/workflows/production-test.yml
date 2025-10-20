@@ -1,0 +1,28 @@
+name: Production Test
+description: Run HuggingFace client in practice.
+on:
+  schedule:
+    - cron: '0 0 * * 0' # Weekly on Sunday at 00:00
+  workflow_dispatch:
+
+jobs:
+  production-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          python -m pip install huggingface_hub[cli] transformers
+      - name: Download a model
+        env:
+          HF_ENDPOINT: ${{ secrets.HF_ENDPOINT }}
+          MODEL_ID: 'Qwen/Qwen3-4B'
+          FORCE_COLOR: '1'
+          CLICOLOR_FORCE: '1'
+          PYTHONUNBUFFERED: '1'
+        run: |
+          hf download $MODEL_ID \
+            > >(sed -u "s|${{ env.HF_ENDPOINT }}|ENDPOINT|g") \
+            2> >(sed -u "s|${{ env.HF_ENDPOINT }}|ENDPOINT|g" >&2)
