@@ -47,7 +47,11 @@ export default {
 
     const userAgent = headers.get('User-Agent')?.toLowerCase();
     // Handle bad bots
-    if (userAgent && !/(transformers|hf_hub)/.test(userAgent)) {
+    if (
+      userAgent
+        ? !/(transformers|hf_hub)/.test(userAgent)
+        : !proxyAllHost || !hostname.startsWith(proxyPrefix) || url.pathname !== '/'
+    ) {
       console.info(`Bad user-agent: ${userAgent}.`)
       return forbidden();
     }
@@ -118,7 +122,8 @@ export default {
         const headers = cloneHeaders(response.headers);
         headers.set('Location', new_url);
         if (headers.has('Link')) {
-          headers.set('Link', processLinkHeader(headers.get('Link')!, hostname));
+          // headers.set('Link', processLinkHeader(headers.get('Link')!, hostname));
+          headers.delete('Link'); // We are still unable to handle Link.
         }
 
         return new Response(response.body, { // Does not modify body, although original hostname is kept
