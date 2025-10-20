@@ -5,11 +5,33 @@ on:
     - cron: '0 0 * * 0' # Weekly on Sunday at 00:00
   workflow_dispatch:
   workflow_call:
+    secrets:
+      HF_ENDPOINT:
+        required: true
 
 jobs:
   production-test:
     runs-on: ubuntu-latest
     steps:
+      - name: Block HuggingFace domains with dnsmasq
+        if: ${{ env.PROXY_ALL_HOST }} == '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dnsmasq
+
+          echo "address=/huggingface.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/.huggingface.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/hf.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/.hf.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+
+          echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+
+          sudo systemctl start dnsmasq
+
+          echo "Testing DNS blocking:"
+          nslookup huggingface.co || echo "✓ huggingface.co blocked"
+          nslookup hf.co || echo "✓ hf.co blocked"
+          nslookup cdn-lfs-1.hf.co || echo "✓ *.hf.co blocked"
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'

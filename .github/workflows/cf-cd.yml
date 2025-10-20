@@ -44,3 +44,6 @@ jobs:
   production-test:
     needs: deploy
     uses: ./.github/workflows/production-test.yml
+    # secrets: inherit
+    secrets:
+      HF_ENDPOINT: ${{ secrets.HF_ENDPOINT }}
