@@ -4,15 +4,23 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
+      - $default-branch
     paths-ignore:
+      - 'test/**'
       - '**.md'
       - '.*'
       - 'LICENSE'
       - '.github/**'
 
 jobs:
+  unit-test:
+    uses: ./.github/workflows/unit-test.yml
+  worker-test:
+    uses: ./.github/workflows/worker-test.yml
   deploy:
+    needs:
+      - unit-test
+      - worker-test
     runs-on: ubuntu-latest
     name: Deploy
     steps:
@@ -29,7 +37,7 @@ jobs:
       - name: Deploy
         run: |
           set -o pipefail
-          npx -y wrangler deploy | grep -v "https://"
+          npx -y wrangler deploy --keep-vars | grep -v "https://"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           FORCE_COLOR: '1'
