@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Block HuggingFace domains with dnsmasq
-        if: ${{ env.PROXY_ALL_HOST }} == '1'
+        if: ${{ env.PROXY_ALL_HOST == '1' }}
         run: |
           CURRENT_DNS=$(resolvectl status | grep "DNS Servers" | awk '{print $3}' | head -n 1)
           echo "Current DNS: $CURRENT_DNS"
