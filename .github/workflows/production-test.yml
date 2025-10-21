@@ -5,11 +5,42 @@ on:
     - cron: '0 0 * * 0' # Weekly on Sunday at 00:00
   workflow_dispatch:
   workflow_call:
+    secrets:
+      HF_ENDPOINT:
+        required: true
 
 jobs:
   production-test:
     runs-on: ubuntu-latest
     steps:
+      - name: Block HuggingFace domains with dnsmasq
+        if: ${{ env.PROXY_ALL_HOST == '1' }}
+        run: |
+          CURRENT_DNS=$(resolvectl status | grep "DNS Servers" | awk '{print $3}' | head -n 1)
+          echo "Current DNS: $CURRENT_DNS"
+
+          sudo apt-get update
+          sudo apt-get install -y dnsmasq
+
+          echo "server=${CURRENT_DNS:-8.8.8.8}" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/huggingface.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/.huggingface.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/huggingface.co/::" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/.huggingface.co/::" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/hf.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/.hf.co/0.0.0.0" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/hf.co/::" | sudo tee -a /etc/dnsmasq.conf
+          echo "address=/.hf.co/::" | sudo tee -a /etc/dnsmasq.conf
+
+          echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+
+          sudo systemctl stop systemd-resolved
+          sudo systemctl start dnsmasq
+
+          echo "Testing DNS blocking:"
+          nslookup huggingface.co || echo "✓ huggingface.co blocked"
+          nslookup hf.co || echo "✓ hf.co blocked"
+          nslookup cdn-lfs-1.hf.co || echo "✓ *.hf.co blocked"
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -18,12 +49,13 @@ jobs:
           python -m pip install huggingface_hub[cli] transformers
       - name: Download a model
         env:
-          HF_ENDPOINT: ${{ secrets.HF_ENDPOINT }}
+          HF_ENDPOINT: https://${{ secrets.HF_ENDPOINT }}
+          ENDPOINT: ${{ secrets.HF_ENDPOINT }}
           MODEL_ID: 'Qwen/Qwen3-4B'
           FORCE_COLOR: '1'
           CLICOLOR_FORCE: '1'
           PYTHONUNBUFFERED: '1'
         run: |
           hf download $MODEL_ID \
-            > >(sed -u "s|${{ env.HF_ENDPOINT }}|ENDPOINT|g") \
-            2> >(sed -u "s|${{ env.HF_ENDPOINT }}|ENDPOINT|g" >&2)
+            > >(sed -u "s|${{ env.ENDPOINT }}|ENDPOINT|g") \
+            2> >(sed -u "s|${{ env.ENDPOINT }}|ENDPOINT|g" >&2)
