@@ -75,7 +75,7 @@ export default {
       const response = await fetch(location, {
         headers,
         method: request.method,
-        body: request.body,
+        // body: request.body,
         redirect: 'manual',
       });
 
@@ -102,7 +102,7 @@ export default {
       const response = await fetch(location, {
         headers,
         method: request.method,
-        body: request.body,
+        // body: request.body,
       });
 
       if (response.ok) {
@@ -132,7 +132,7 @@ export default {
         redirect: 'manual', // Prevent auto re-execution
         headers: request.headers,
         method: request.method,
-        body: request.body,
+        // body: request.body,
       });
       request_to_upstream.headers.set('Host', UpstreamHost);
       request_to_upstream.headers.set('Accept-Encoding', 'identity'); // Get Content-Length header
