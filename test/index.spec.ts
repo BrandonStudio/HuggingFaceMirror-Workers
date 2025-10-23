@@ -1,8 +1,8 @@
 import { env, createExecutionContext, waitOnExecutionContext, SELF, fetchMock } from 'cloudflare:test';
-import { describe, it, expect, afterEach, beforeAll } from 'vitest';
+import { describe, it, expect, afterEach, beforeAll, beforeEach } from 'vitest';
 import worker from '../src/index';
-import { proxyPrefix, UpstreamHost, UpstreamHost2 } from '../src/index';
-import type { XetTokenResponse } from '../src/index';
+import { proxyPrefix, casXetProxyPrefix, UpstreamHost, UpstreamHost2 } from '../src/index';
+import type { XetTokenResponse, CasXetReconstructionResponse } from '@/types/hf';
 
 // For now, you'll need to do something like this to get a correctly-typed
 // `Request` to pass to `worker.fetch()`.
@@ -84,6 +84,91 @@ describe('Tests with fetch-mock', () => {
       expect(headers.get('Custom-Header')).toBe('custom-value');
       expect(await response.text()).toBe('Upstream response');
     });
+
+    it('should modify cas-xet reconstructions responses', async () => {
+      const location = `https://cas-server.xethub.${UpstreamHost2}/reconstructions/hash1`;
+      const request = new IncomingRequest(`https://${casXetProxyPrefix}.example.com?location=${encodeURIComponent(location)}`, {
+        headers: {
+          'User-Agent': 'transformers/4.30.0',
+        },
+      });
+
+      const originalResponse: CasXetReconstructionResponse = {
+        offset_into_first_range: 0,
+        terms: [
+          {
+            hash: 'abc123',
+            unpacked_length: 1024,
+            range: {
+              start: 0,
+              end: 1023,
+            },
+          },
+        ],
+        fetch_info: {
+          'abc123': [
+            {
+              range: {
+                start: 0,
+                end: 1023,
+              },
+              url: `https://transfer.xethub.${UpstreamHost2}/path/to/blob`,
+              url_range: {
+                start: 0,
+                end: 1023,
+              },
+            },
+          ],
+        },
+      };
+
+      const expectedResponse: CasXetReconstructionResponse = {
+        offset_into_first_range: 0,
+        terms: [
+          {
+            hash: 'abc123',
+            unpacked_length: 1024,
+            range: {
+              start: 0,
+              end: 1023,
+            },
+          },
+        ],
+        fetch_info: {
+          'abc123': [
+            {
+              range: {
+                start: 0,
+                end: 1023,
+              },
+              url: `https://${proxyPrefix}.example.com/?location=https%3A%2F%2Ftransfer.xethub.hf.co%2Fpath%2Fto%2Fblob`,
+              url_range: {
+                start: 0,
+                end: 1023,
+              },
+            },
+          ],
+        },
+      };
+
+      fetchMock
+        .get(new URL(location).origin)
+        .intercept({ path: '/reconstructions/hash1' })
+        .reply(200, originalResponse, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+
+      const ctx = createExecutionContext();
+      const response = await worker.fetch(request, env, ctx);
+      await waitOnExecutionContext(ctx);
+      expect(response.status).toBe(200);
+      const headers = response.headers;
+      expect(headers.get('Content-Type')).toBe('application/json');
+      const json = await response.json<CasXetReconstructionResponse>();
+      expect(json).toEqual(expectedResponse);
+    });
   });
 
   describe('Root requests', () => {
@@ -113,10 +198,10 @@ describe('Tests with fetch-mock', () => {
       const headers = response.headers;
       expect(headers.get('Custom-Header')).toBe('custom-value');
       expect(await response.text()).toBe('This is a README file.');
+      expect(headers.get('Content-Length')).toBe('22');
       expect(response.headers.get('X-Linked-Size')).toBe('22');
     });
 
-    /*
     it('should handle xet-read-token requests', async () => {
       const request = new IncomingRequest(`https://example.com/path/xet-read-token/some-id`, {
         headers: {
@@ -125,8 +210,8 @@ describe('Tests with fetch-mock', () => {
       });
 
       const tokenUrl = `https://${UpstreamHost}/path/xet-read-token/some-id`;
-      const casUrl = `https://cdn-lfs.${UpstreamHost2}/some-path`;
-      const expectedCasUrl = `https://${proxyPrefix}.example.com/?location=${encodeURIComponent(casUrl)}`;
+      const casUrl = `https://cas-server.xethub.${UpstreamHost2}/some-path`;
+      const expectedCasUrl = `https://${casXetProxyPrefix}.example.com/?location=${encodeURIComponent(casUrl)}`;
 
       fetchMock
         .get(new URL(tokenUrl).origin)
@@ -159,7 +244,6 @@ describe('Tests with fetch-mock', () => {
       expect(json.accessToken).toBe('some-token');
       expect(json.casUrl).toBe(expectedCasUrl);
     });
-    */
 
     describe('Redirection handling', () => {
       it('should redirect as is if PROXY_ALL_HOST is false', async () => {
@@ -223,7 +307,7 @@ describe('Tests with fetch-mock', () => {
         expect(headers.get('Custom-Header')).toBe('custom-value');
       });
 
-      it('should handle Link header when PROXY_ALL_HOST is true', async () => {
+      describe('Link header handling', () => {
         const request = new IncomingRequest(`https://example.com/models/with-link-header`, {
           headers: {
             'User-Agent': 'transformers/4.30.0',
@@ -232,29 +316,46 @@ describe('Tests with fetch-mock', () => {
 
         const linkHeader = `<https://${UpstreamHost}/path/to/resource>; rel="next", <https://cdn-lfs.${UpstreamHost2}/file>; rel="file"`;
 
-        fetchMock
-          .get(new URL(`https://${UpstreamHost}/models/with-link-header`).origin)
-          .intercept({ path: '/models/with-link-header' })
-          .reply(302, 'Response with Link header', {
-            headers: {
-              Link: linkHeader,
-              Location: `https://${UpstreamHost}/path/to/resource`,
-            },
-          });
+        beforeEach(() => {
+          fetchMock
+            .get(new URL(`https://${UpstreamHost}/models/with-link-header`).origin)
+            .intercept({ path: '/models/with-link-header' })
+            .reply(302, 'Response with Link header', {
+              headers: {
+                Link: linkHeader,
+                Location: `https://${UpstreamHost}/path/to/resource`,
+              },
+            });
+        });
 
-        const ctx = createExecutionContext();
-        const response = await worker.fetch(request, {
-          PROXY_ALL_HOST: '1',
-        } as typeof env, ctx);
-        await waitOnExecutionContext(ctx);
-        expect(response.status).toBe(302);
-        expect(await response.text()).toBe('Response with Link header');
-        const link = response.headers.get('Link');
-        expect(link).toBeNull();
-        // expect(link).toBe(
-        //   `<https://example.com/path/to/resource>; rel="next", ` +
-        //   `<https://hf-proxy.example.com/?location=https%3A%2F%2Fcdn-lfs.hf.co%2Ffile>; rel="file"`
-        // );
+        it('should remove Link header when USE_XET_TRANSFER is falsy', async () => {
+          const ctx = createExecutionContext();
+          const response = await worker.fetch(request, {
+            PROXY_ALL_HOST: '1',
+            USE_XET_TRANSFER: undefined,
+          } as typeof env, ctx);
+          await waitOnExecutionContext(ctx);
+          expect(response.status).toBe(302);
+          expect(await response.text()).toBe('Response with Link header');
+          const link = response.headers.get('Link');
+          expect(link).toBeNull();
+        });
+
+        it('should handle Link header when USE_XET_TRANSFER is truthy', async () => {
+          const ctx = createExecutionContext();
+          const response = await worker.fetch(request, {
+            PROXY_ALL_HOST: '1',
+            USE_XET_TRANSFER: '1',
+          } as typeof env, ctx);
+          await waitOnExecutionContext(ctx);
+          expect(response.status).toBe(302);
+          expect(await response.text()).toBe('Response with Link header');
+          const link = response.headers.get('Link');
+          expect(link).toBe(
+            `<https://example.com/path/to/resource>; rel="next", ` +
+            `<https://hf-proxy.example.com/?location=https%3A%2F%2Fcdn-lfs.hf.co%2Ffile>; rel="file"`
+          );
+        });
       });
     });
   });

@@ -12,15 +12,26 @@ A reverse proxy to mirror HuggingFace models and datasets on Cloudflare Workers.
 ### Variations
 
 This repo provides two ways of proxy:
-- Basic (**Default**): Hostname that ends with `.hf.co` is excluded. All redirection response to `*.hf.co` will be returned as is.
+- **Basic (Default)**: Hostname that ends with `.hf.co` is excluded. All redirection response to `*.hf.co` will be returned as is.
 - Proxy-All: All requests are proxied.
+  - Traditional: Follow 302 Location to redirect LFS.
+  - CAS-XET: Use CAS-XET reconstruction service to proxy LFS.
 
-Use `PROXY_ALL_HOST` environment variable to switch between these two modes.
+> [!CAUTION]
+> Support of CAS-XET is experimental and likely to be troublesome.
 
-> \[!TIP]
+### Environment Variables and Custom Domains
+
+- **`PROXY_ALL_HOST`**: Switch between Basic and Proxy-All mode. Requiring custom domain `hf-proxy.<domain>`.
+- **`USE_CAS_XET`**: When in Proxy-All mode, switch between Traditional and CAS-XET method for LFS proxy. Requiring custom domain `cas-xet.<domain>`.
+
+See [`worker-configuration.d.ts`](worker-configuration.d.ts) for detailed descriptions.
+
+> [!TIP]
 >
-> Proxy-All mode requires another custom domain `hf-proxy.<domain>`.
-> For example, if your custom domain is `https://your.domain`, then you need to set up `https://hf-proxy.your.domain` as a custom domain in Cloudflare Workers.
+> For example, if your custom domain is `https://your.domain`,
+> the Proxy-All mode requires `https://hf-proxy.your.domain`,
+> and the CAS-XET method requires `https://cas-xet.your.domain`.
 
 ## Usage
 

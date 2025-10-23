@@ -16,15 +16,12 @@
  * limitations under the License.
  */
 
+import { XetTokenResponse, CasXetReconstructionResponse } from "@/types/hf";
+
 export const proxyPrefix = 'hf-proxy';
+export const casXetProxyPrefix = 'cas-xet';
 export const UpstreamHost = 'huggingface.co';
 export const UpstreamHost2 = 'hf.co';
-
-export type XetTokenResponse = {
-  casUrl: string;
-  exp: string;
-  accessToken: string;
-};
 
 export const truthy = (v?: string) => {
   if (!v) return false;
@@ -50,7 +47,7 @@ export default {
     if (
       userAgent
         ? !/(transformers|hf_hub)/.test(userAgent)
-        : !proxyAllHost || !hostname.startsWith(proxyPrefix) || url.pathname !== '/'
+        : !proxyAllHost || (!hostname.startsWith(proxyPrefix) && !hostname.startsWith(casXetProxyPrefix)) || url.pathname !== '/'
     ) {
       console.info(`Bad user-agent: ${userAgent}.`)
       return forbidden();
@@ -78,12 +75,53 @@ export default {
       const response = await fetch(location, {
         headers,
         method: request.method,
-        body: request.body,
+        body: request.body ?? undefined,
         redirect: 'manual',
       });
 
       // Assume we don't need another redirection.
       return response;
+    } else if (hostname.startsWith(casXetProxyPrefix)) {
+      let location = url.searchParams.get('location');
+      if (!location) {
+        return badRequest();
+      }
+
+      try {
+        location = decodeURIComponent(location);
+        const location_url = new URL(location);
+        if (!location_url.hostname.endsWith('.' + UpstreamHost) && !location_url.hostname.endsWith('.' + UpstreamHost2)) {
+          // Only allow requests to huggingface.co and hf.co
+          return forbidden();
+        }
+      } catch (e) {
+        console.error(`Invalid location URL: ${location}`, e);
+        return badRequest();
+      }
+
+      const response = await fetch(location, {
+        headers,
+        method: request.method,
+        body: request.body ?? undefined,
+      });
+
+      if (response.ok) {
+        const responseBody = await response.json<CasXetReconstructionResponse>();
+        const modifiedBody = replaceCasXetReconstructionResponse(responseBody, hostname.substring(casXetProxyPrefix.length + 1));
+
+        return new Response(JSON.stringify(modifiedBody), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      } else {
+        console.error(`Failed to fetch CAS XET reconstruction: ${response.status} ${response.statusText}`);
+        return new Response(response.body, {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      }
     } else {
       // Handle root requests
 
@@ -94,7 +132,7 @@ export default {
         redirect: 'manual', // Prevent auto re-execution
         headers: request.headers,
         method: request.method,
-        body: request.body,
+        body: request.body ?? undefined,
       });
       request_to_upstream.headers.set('Host', UpstreamHost);
       request_to_upstream.headers.set('Accept-Encoding', 'identity'); // Get Content-Length header
@@ -122,8 +160,11 @@ export default {
         const headers = cloneHeaders(response.headers);
         headers.set('Location', new_url);
         if (headers.has('Link')) {
-          // headers.set('Link', processLinkHeader(headers.get('Link')!, hostname));
-          headers.delete('Link'); // We are still unable to handle Link.
+          if (truthy(env.USE_XET_TRANSFER)) {
+            headers.set('Link', processLinkHeader(headers.get('Link')!, hostname));
+          } else {
+            headers.delete('Link');
+          }
         }
 
         return new Response(response.body, { // Does not modify body, although original hostname is kept
@@ -133,10 +174,10 @@ export default {
         });
       } else if (request_to_upstream_url.pathname.includes('/xet-read-token/')) {
         // special handling for xet-read-token, which returns a JSON response
-        const tokenResponse = await response.json() as XetTokenResponse;
+        const tokenResponse = await response.json<XetTokenResponse>();
         const headers2 = cloneHeaders(response.headers);
-        tokenResponse['casUrl'] = replaceUrl2(tokenResponse['casUrl'], hostname);
-        headers2.set('X-Xet-Cas-Url', replaceUrl2(headers2.get('X-Xet-Cas-Url') || tokenResponse['casUrl'], hostname));
+        tokenResponse['casUrl'] = replaceCasXetUrl(tokenResponse['casUrl'], hostname);
+        headers2.set('X-Xet-Cas-Url', replaceCasXetUrl(headers2.get('X-Xet-Cas-Url') || tokenResponse['casUrl'], hostname));
         headers2.set('Content-Type', 'application/json');
         headers2.delete('Content-Length');
         return new Response(JSON.stringify(tokenResponse), {
@@ -185,6 +226,12 @@ export function replaceUrl2(url: string, hostname: string) {
   return `https://${newHostname}/?location=${encodedUrl}`;
 }
 
+export function replaceCasXetUrl(url: string, hostname: string) {
+  const encodedUrl = encodeURIComponent(url);
+  const newHostname = `${casXetProxyPrefix}.${hostname}`;
+  return `https://${newHostname}/?location=${encodedUrl}`;
+}
+
 export function processLinkHeader(linkHeader: string, hostname: string) {
   const regex = /<(https?:\/\/[^>]+)>/g;
   return linkHeader.replace(regex, (match, url) => {
@@ -203,4 +250,16 @@ export function processLinkHeader(linkHeader: string, hostname: string) {
       return match; // Do not modify
     }
   });
+}
+
+export function replaceCasXetReconstructionResponse(
+  response: CasXetReconstructionResponse,
+  hostname: string,
+): CasXetReconstructionResponse {
+  for (const info of Object.values(response.fetch_info)) {
+    for (const item of info) {
+      item.url = replaceUrl2(item.url, hostname);
+    }
+  }
+  return response;
 }
