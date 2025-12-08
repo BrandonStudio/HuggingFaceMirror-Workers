@@ -62,7 +62,7 @@ jobs:
       - name: Test file sizes
         run: |
           set -euo pipefail
-          mapfile -t zero_files < <(find ~/.cache/huggingface/hub/models--Qwen-Qwen3-4B/blobs -type f -size 0c -print)
+          mapfile -t zero_files < <(find ~/.cache/huggingface/hub/models--Qwen--Qwen3-4B/blobs -type f -size 0c -print)
 
           if [ ${#zero_files[@]} -gt 0 ]; then
             echo "Found zero-size snapshot/blob files:" >&2
