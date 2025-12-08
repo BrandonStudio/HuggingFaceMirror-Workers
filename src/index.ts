@@ -187,10 +187,28 @@ export default {
         });
       } else {
         // normal response
-        const responseBuffer = await response.arrayBuffer();
-        const headers = cloneHeaders(response.headers);
-
         const l = response.headers.get('Content-Length');
+        const headers = cloneHeaders(response.headers);
+        let responseBuffer: ArrayBuffer;
+        if (!l && request.method === 'HEAD') {
+          // Failed to get Content-Length for HEAD request.
+          // Falling back to GET request to get the size.
+          const getResponse = await fetch(request_to_upstream, {
+            method: 'GET',
+          });
+          if (!getResponse.ok) {
+            console.error(`Upstream GET request failed with status ${getResponse.status} ${getResponse.statusText}`);
+            return new Response(getResponse.body, {
+              status: getResponse.status,
+              statusText: getResponse.statusText,
+              headers: getResponse.headers,
+            });
+          }
+          responseBuffer = await getResponse.arrayBuffer();
+        } else {
+          responseBuffer = await response.arrayBuffer();
+        }
+
         if (!headers.has('X-Linked-Size')) {
           // Use compatible X-Linked-Size header for transformers, in case Content-Length is missing.
           headers.set('X-Linked-Size', l || responseBuffer.byteLength.toString());

@@ -37,6 +37,20 @@ See [`worker-configuration.d.ts`](worker-configuration.d.ts) for detailed descri
 
 Just set environment variable `HF_ENDPOINT` to your domain, such as `https://your.domain`.
 
+## Known Issues
+
+### Content-Length headers
+
+Huggingface clients expect `Content-Length` headers for all responses, including HEAD requests.
+However, there is no way to set `Content-Length` headers in Cloudflare Workers as far as I know.
+Nevertheless, the clients treat `X-Linked-Size` the same as `Content-Length`, so this project sets `X-Linked-Size` headers instead.
+
+The other problem is the `Content-Length` header from upstream response.
+It seems that Cloudflare Workers could not receive `Content-Length` headers from upstream responses.
+This issue is particularly weird that it only happens in deployments, but not in online debugging environment.
+As a workaround, this project receives the whole response body to calculate the content length, which may introduce performance overhead (but these files are usually very small).
+For HEAD requests, the project makes a separate GET request to get the content length.
+
 ## [License](LICENSE)
 Copyright 2024-2025 BrandonStudio.
 
