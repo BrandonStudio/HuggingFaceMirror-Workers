@@ -1,24 +1,16 @@
-import { env, createExecutionContext, waitOnExecutionContext, SELF, fetchMock } from 'cloudflare:test';
-import { describe, it, expect, afterEach, beforeAll, beforeEach } from 'vitest';
+import { env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { http, HttpResponse } from 'msw';
 import worker from '../src/index';
 import { proxyPrefix, casXetProxyPrefix, UpstreamHost, UpstreamHost2 } from '../src/index';
 import type { XetTokenResponse, CasXetReconstructionResponse } from '@/types/hf';
+import { server } from './server';
 
 // For now, you'll need to do something like this to get a correctly-typed
 // `Request` to pass to `worker.fetch()`.
 const IncomingRequest = Request<unknown, IncomingRequestCfProperties>;
 
 describe('Tests with fetch-mock', () => {
-  beforeAll(() => {
-    // https://github.com/cloudflare/workers-sdk/blob/main/fixtures/vitest-pool-workers-examples/request-mocking/test/declarative.test.ts
-    fetchMock.activate();
-    fetchMock.disableNetConnect();
-  });
-
-  afterEach(() => {
-    fetchMock.assertNoPendingInterceptors();
-  });
-
   describe('Request filtering', () => {
     it('should refuse bad user-agent', async () => {
       const request = new IncomingRequest('https://example.com', {
@@ -26,7 +18,6 @@ describe('Tests with fetch-mock', () => {
           'User-Agent': 'BadBot/1.0',
         },
       });
-      // Create an empty context to pass to `worker.fetch()`.
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
       await waitOnExecutionContext(ctx);
@@ -67,14 +58,17 @@ describe('Tests with fetch-mock', () => {
         },
       });
 
-      fetchMock
-        .get(new URL(location).origin)
-        .intercept({ path: '/model' })
-        .reply(200, 'Upstream response', {
-          headers: {
-            'Custom-Header': 'custom-value',
-          },
-        });
+      server.use(
+        http.get(location, () =>
+          HttpResponse.text('Upstream response', {
+            status: 200,
+            headers: {
+              'Custom-Header': 'custom-value',
+            },
+          }),
+          { once: true }
+        )
+      );
 
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
@@ -151,14 +145,12 @@ describe('Tests with fetch-mock', () => {
         },
       };
 
-      fetchMock
-        .get(new URL(location).origin)
-        .intercept({ path: '/reconstructions/hash1' })
-        .reply(200, originalResponse, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        });
+      server.use(
+        http.get(location, () =>
+          HttpResponse.json(originalResponse, { status: 200 }),
+          { once: true }
+        )
+      );
 
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
@@ -180,16 +172,21 @@ describe('Tests with fetch-mock', () => {
       });
 
       const fileUrl = `https://${UpstreamHost}/files/README.md`;
+      const body = 'This is a README file.';
+      const contentLength = new TextEncoder().encode(body).length.toString();
 
-      fetchMock
-        .get(new URL(fileUrl).origin)
-        .intercept({ path: '/files/README.md' })
-        .replyContentLength()
-        .reply(200, 'This is a README file.', {
-          headers: {
-            'Custom-Header': 'custom-value',
-          },
-        });
+      server.use(
+        http.get(fileUrl, () =>
+          HttpResponse.text(body, {
+            status: 200,
+            headers: {
+              'Custom-Header': 'custom-value',
+              'Content-Length': contentLength,
+            },
+          }),
+          { once: true }
+        )
+      );
 
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
@@ -213,22 +210,27 @@ describe('Tests with fetch-mock', () => {
       const casUrl = `https://cas-server.xethub.${UpstreamHost2}/some-path`;
       const expectedCasUrl = `https://${casXetProxyPrefix}.example.com/?location=${encodeURIComponent(casUrl)}`;
 
-      fetchMock
-        .get(new URL(tokenUrl).origin)
-        .intercept({ path: '/path/xet-read-token/some-id' })
-        .reply(200, {
-          accessToken: 'some-token',
-          casUrl: casUrl,
-          exp: '124',
-        } satisfies XetTokenResponse, {
-          headers: {
-            'Content-Type': 'application/json',
-            'Custom-Header': 'custom-value',
-            'X-Xet-Cas-Url': casUrl,
-            'X-Xet-Token-Expiration': '124',
-            'X-Xet-Access-Token': 'some-token',
-          },
-        });
+      server.use(
+        http.get(tokenUrl, () =>
+          HttpResponse.json(
+            {
+              accessToken: 'some-token',
+              casUrl: casUrl,
+              exp: '124',
+            } satisfies XetTokenResponse,
+            {
+              status: 200,
+              headers: {
+                'Custom-Header': 'custom-value',
+                'X-Xet-Cas-Url': casUrl,
+                'X-Xet-Token-Expiration': '124',
+                'X-Xet-Access-Token': 'some-token',
+              },
+            }
+          ),
+          { once: true }
+        )
+      );
 
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
@@ -255,15 +257,18 @@ describe('Tests with fetch-mock', () => {
 
         const redirectUrl = `https://cdn-lfs-1.${UpstreamHost2}/some-model`;
 
-        fetchMock
-          .get(new URL(`https://${UpstreamHost}/models/redirect-hf`).origin)
-          .intercept({ path: '/models/redirect-hf' })
-          .reply(302, '', {
-            headers: {
-              Location: redirectUrl,
-              'Custom-Header': 'custom-value',
-            },
-          });
+        server.use(
+          http.get(`https://${UpstreamHost}/models/redirect-hf`, () =>
+            new HttpResponse(null, {
+              status: 302,
+              headers: {
+                Location: redirectUrl,
+                'Custom-Header': 'custom-value',
+              },
+            }),
+            { once: true }
+          )
+        );
 
         const ctx = createExecutionContext();
         const response = await worker.fetch(request, {
@@ -285,15 +290,18 @@ describe('Tests with fetch-mock', () => {
 
         const redirectUrl = `https://cdn-lfs-1.${UpstreamHost2}/some-model`;
 
-        fetchMock
-          .get(new URL(`https://${UpstreamHost}/models/redirect-hf`).origin)
-          .intercept({ path: '/models/redirect-hf' })
-          .reply(302, '', {
-            headers: {
-              Location: redirectUrl,
-              'Custom-Header': 'custom-value',
-            },
-          });
+        server.use(
+          http.get(`https://${UpstreamHost}/models/redirect-hf`, () =>
+            new HttpResponse(null, {
+              status: 302,
+              headers: {
+                Location: redirectUrl,
+                'Custom-Header': 'custom-value',
+              },
+            }),
+            { once: true }
+          )
+        );
 
         const ctx = createExecutionContext();
         const response = await worker.fetch(request, {
@@ -317,15 +325,18 @@ describe('Tests with fetch-mock', () => {
         const linkHeader = `<https://${UpstreamHost}/path/to/resource>; rel="next", <https://cdn-lfs.${UpstreamHost2}/file>; rel="file"`;
 
         beforeEach(() => {
-          fetchMock
-            .get(new URL(`https://${UpstreamHost}/models/with-link-header`).origin)
-            .intercept({ path: '/models/with-link-header' })
-            .reply(302, 'Response with Link header', {
-              headers: {
-                Link: linkHeader,
-                Location: `https://${UpstreamHost}/path/to/resource`,
-              },
-            });
+          server.use(
+            http.get(`https://${UpstreamHost}/models/with-link-header`, () =>
+              new HttpResponse('Response with Link header', {
+                status: 302,
+                headers: {
+                  Link: linkHeader,
+                  Location: `https://${UpstreamHost}/path/to/resource`,
+                },
+              }),
+              { once: true }
+            )
+          );
         });
 
         it('should remove Link header when USE_XET_TRANSFER is falsy', async () => {
@@ -360,3 +371,4 @@ describe('Tests with fetch-mock', () => {
     });
   });
 });
+
