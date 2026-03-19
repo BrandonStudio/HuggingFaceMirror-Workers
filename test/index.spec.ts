@@ -18,7 +18,6 @@ describe('Tests with fetch-mock', () => {
           'User-Agent': 'BadBot/1.0',
         },
       });
-      // Create an empty context to pass to `worker.fetch()`.
       const ctx = createExecutionContext();
       const response = await worker.fetch(request, env, ctx);
       await waitOnExecutionContext(ctx);
@@ -62,6 +61,7 @@ describe('Tests with fetch-mock', () => {
       server.use(
         http.get(location, () =>
           HttpResponse.text('Upstream response', {
+            status: 200,
             headers: {
               'Custom-Header': 'custom-value',
             },
@@ -147,7 +147,7 @@ describe('Tests with fetch-mock', () => {
 
       server.use(
         http.get(location, () =>
-          HttpResponse.json(originalResponse),
+          HttpResponse.json(originalResponse, { status: 200 }),
           { once: true }
         )
       );
@@ -178,6 +178,7 @@ describe('Tests with fetch-mock', () => {
       server.use(
         http.get(fileUrl, () =>
           HttpResponse.text(body, {
+            status: 200,
             headers: {
               'Custom-Header': 'custom-value',
               'Content-Length': contentLength,
@@ -218,6 +219,7 @@ describe('Tests with fetch-mock', () => {
               exp: '124',
             } satisfies XetTokenResponse,
             {
+              status: 200,
               headers: {
                 'Custom-Header': 'custom-value',
                 'X-Xet-Cas-Url': casUrl,
