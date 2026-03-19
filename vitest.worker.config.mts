@@ -1,6 +1,12 @@
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+import { cloudflareTest } from '@cloudflare/vitest-pool-workers';
+import { defineConfig } from 'vitest/config';
 
-export default defineWorkersConfig({
+export default defineConfig({
+  plugins: [
+    cloudflareTest({
+      wrangler: { configPath: './wrangler.toml' },
+    }),
+  ],
   test: {
     inspector: {
       port: 9329,
@@ -12,10 +18,6 @@ export default defineWorkersConfig({
       '**/build/**',
       '**/*.unit.test.ts',
     ],
-    poolOptions: {
-      workers: {
-        wrangler: { configPath: './wrangler.toml' },
-      },
-    },
+    setupFiles: ['test/setup.ts'],
   },
 });
