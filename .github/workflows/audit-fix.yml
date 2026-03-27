@@ -1,0 +1,36 @@
+name: Fix Audit Issues
+on:
+  workflow_dispatch:
+
+jobs:
+  npm-audit-fix:
+    runs-on: ubuntu-latest
+    name: Fix npm audit issues
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - name: Install dependencies
+        run: |
+          npm ci
+      - name: Check for vulnerabilities
+        id: audit
+        run: |
+          npm audit > "${{ runner.temp }}/audit.txt" || echo "vulnerable=true" >> "$GITHUB_OUTPUT"
+      - name: Fix vulnerabilities
+        if: steps.audit.outputs.vulnerable == 'true'
+        run: |
+          npm audit fix
+      - name: Create Pull Request
+        if: steps.audit.outputs.vulnerable == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Security updates"
+          title: "Fix Security Vulnerabilities"
+          body-path: "${{ runner.temp }}/audit.txt"
+          base: main
+          branch: audit-fix/${{ github.run_id }}
