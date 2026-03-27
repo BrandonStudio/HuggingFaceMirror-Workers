@@ -9,11 +9,13 @@ on:
       - '**.md'
       - '.*'
       - 'LICENSE'
+      - '.github/**'
   push:
     paths-ignore:
       - '**.md'
       - '.*'
       - 'LICENSE'
+      - '.github/**'
 
 jobs:
   test:
