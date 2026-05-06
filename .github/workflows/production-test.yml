@@ -1,5 +1,4 @@
 name: Production Test
-description: Run HuggingFace client in practice.
 on:
   schedule:
     - cron: '0 0 * * 0' # Weekly on Sunday at 00:00
@@ -8,6 +7,13 @@ on:
     secrets:
       HF_ENDPOINT:
         required: true
+  workflow_run:
+    workflows:
+      - Deploy
+    branches:
+      - main
+    types:
+      - completed
 
 jobs:
   production-test:
