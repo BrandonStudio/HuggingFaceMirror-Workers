@@ -46,9 +46,9 @@ jobs:
           }
           Write-Output "``````" >> $outFile
           $packages = "$vulnerabilities".Replace("`n", ", ")
-          Write-Output "packages=$packages" >> "$env:GITHUB_OUTPUT"
+          Write-Output "packages=`"$packages`"" >> "$env:GITHUB_OUTPUT"
       - name: Fix vulnerabilities
-        if: steps.audit.outputs.vulnerable == 'true' && github.event.inputs.create_pull_request == 'false'
+        if: steps.audit.outputs.vulnerable == 'true' && github.event.inputs.create_pull_request == 'true'
         run: |
           npm audit fix
       - name: Create Pull Request
