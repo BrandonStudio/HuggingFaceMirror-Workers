@@ -34,6 +34,7 @@ jobs:
           npm audit | tee "${{ runner.temp }}/audit.txt" || echo "vulnerable=true" >> "$GITHUB_OUTPUT"
           npm audit --json > "${{ runner.temp }}/audit.json" || echo > /dev/null
       - name: Find dependency chain
+        id: find_chain
         if: steps.audit.outputs.vulnerable == 'true'
         shell: pwsh
         run: |
@@ -46,7 +47,7 @@ jobs:
           }
           Write-Output "``````" >> $outFile
           $packages = "$vulnerabilities".Replace("`n", ", ")
-          Write-Output "packages=`"$packages`"" >> "$env:GITHUB_OUTPUT"
+          Write-Output "packages=$packages" >> "$env:GITHUB_OUTPUT"
       - name: Fix vulnerabilities
         if: steps.audit.outputs.vulnerable == 'true' && github.event.inputs.create_pull_request == 'true'
         run: |
@@ -66,7 +67,7 @@ jobs:
       - name: Report result
         run: |
           if [ "${{ steps.audit.outputs.vulnerable }}" == "true" ]; then
-            echo "Found vulnerabilities of following packages: ${{ steps.audit.outputs.packages }}."
+            echo "Found vulnerabilities of following packages: ${{ steps.find_chain.outputs.packages }}."
             if [ "${{ github.event.inputs.create_pull_request }}" == "true" ]; then
               echo "Pull request created: ${{ steps.create_pr.outputs.pull-request-url }}."
             fi
