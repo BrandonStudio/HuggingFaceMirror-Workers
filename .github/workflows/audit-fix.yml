@@ -1,6 +1,17 @@
 name: Fix Audit Issues
+
 on:
   workflow_dispatch:
+    inputs:
+      create_pull_request:
+        description: 'Create a pull request with the fixes'
+        type: boolean
+        required: true
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
   npm-audit-fix:
@@ -19,18 +30,47 @@ jobs:
       - name: Check for vulnerabilities
         id: audit
         run: |
-          npm audit > "${{ runner.temp }}/audit.txt" || echo "vulnerable=true" >> "$GITHUB_OUTPUT"
-      - name: Fix vulnerabilities
+          set -o pipefail
+          npm audit | tee "${{ runner.temp }}/audit.txt" || echo "vulnerable=true" >> "$GITHUB_OUTPUT"
+          npm audit --json > "${{ runner.temp }}/audit.json" || echo > /dev/null
+      - name: Find dependency chain
+        id: find_chain
         if: steps.audit.outputs.vulnerable == 'true'
+        shell: pwsh
+        run: |
+          $audit = Get-Content -Raw -Path "${{ runner.temp }}/audit.json" | ConvertFrom-Json
+          $vulnerabilities = $audit.vulnerabilities.PSObject.Properties.Name
+          $outFile = "${{ runner.temp }}/audit.txt"
+          Write-Output "`nCause:`n``````" >> $outFile
+          foreach ($vulnerability in $vulnerabilities) {
+            npm why $vulnerability | tee -a $outFile
+          }
+          Write-Output "``````" >> $outFile
+          $packages = "$vulnerabilities".Replace("`n", ", ")
+          Write-Output "packages=$packages" >> "$env:GITHUB_OUTPUT"
+      - name: Fix vulnerabilities
+        if: steps.audit.outputs.vulnerable == 'true' && github.event.inputs.create_pull_request == 'true'
         run: |
           npm audit fix
       - name: Create Pull Request
-        if: steps.audit.outputs.vulnerable == 'true'
+        id: create_pr
+        if: steps.audit.outputs.vulnerable == 'true' && github.event.inputs.create_pull_request == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Security updates"
-          title: "Fix Security Vulnerabilities"
+          title: "Fix Security Vulnerabilities ${{ steps.audit.outputs.packages }}"
           body-path: "${{ runner.temp }}/audit.txt"
           base: ${{ github.ref_name }}
           branch: audit-fix/${{ github.run_id }}
+          labels: dependencies
+      - name: Report result
+        run: |
+          if [ "${{ steps.audit.outputs.vulnerable }}" == "true" ]; then
+            echo "Found vulnerabilities of following packages: ${{ steps.find_chain.outputs.packages }}."
+            if [ "${{ github.event.inputs.create_pull_request }}" == "true" ]; then
+              echo "Pull request created: ${{ steps.create_pr.outputs.pull-request-url }}."
+            fi
+          else
+            echo "No vulnerabilities found."
+          fi
