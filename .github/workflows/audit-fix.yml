@@ -30,9 +30,12 @@ jobs:
         run: |
           $audit = Get-Content -Raw -Path "${{ runner.temp }}/audit.json" | ConvertFrom-Json
           $vulnerabilities = $audit.vulnerabilities.PSObject.Properties.Name
+          $outFile = "${{ runner.temp }}/audit.txt"
+          Write-Output "`nVulnerabilities found:`n```````n" >> $outFile
           foreach ($vulnerability in $vulnerabilities) {
-            npm why $vulnerability | tee -a "${{ runner.temp }}/audit.txt"
+            npm why $vulnerability | tee -a $outFile
           }
+          Write-Output "``````" >> $outFile
       - name: Fix vulnerabilities
         if: steps.audit.outputs.vulnerable == 'true'
         run: |
