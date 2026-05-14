@@ -1,6 +1,8 @@
 name: Fix Audit Issues
 on:
   workflow_dispatch:
+permissions:
+  pull-requests: write
 
 jobs:
   npm-audit-fix:
@@ -19,7 +21,18 @@ jobs:
       - name: Check for vulnerabilities
         id: audit
         run: |
-          npm audit > "${{ runner.temp }}/audit.txt" || echo "vulnerable=true" >> "$GITHUB_OUTPUT"
+          set -o pipefail
+          npm audit | tee "${{ runner.temp }}/audit.txt" || echo "vulnerable=true" >> "$GITHUB_OUTPUT"
+          npm audit --json > "${{ runner.temp }}/audit.json"
+      - name: Find dependency chain
+        if: steps.audit.outputs.vulnerable == 'true'
+        shell: pwsh
+        run: |
+          $audit = Get-Content -Raw -Path "${{ runner.temp }}/audit.json" | ConvertFrom-Json
+          $vulnerabilities = $audit.vulnerabilities.PSObject.Properties.Name
+          foreach ($vulnerability in $vulnerabilities) {
+            npm why $vulnerability | tee -a "${{ runner.temp }}/audit.txt"
+          }
       - name: Fix vulnerabilities
         if: steps.audit.outputs.vulnerable == 'true'
         run: |
