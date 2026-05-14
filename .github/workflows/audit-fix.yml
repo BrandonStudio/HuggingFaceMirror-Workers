@@ -32,11 +32,13 @@ jobs:
           $audit = Get-Content -Raw -Path "${{ runner.temp }}/audit.json" | ConvertFrom-Json
           $vulnerabilities = $audit.vulnerabilities.PSObject.Properties.Name
           $outFile = "${{ runner.temp }}/audit.txt"
-          Write-Output "`nVulnerabilities found:`n```````n" >> $outFile
+          Write-Output "`nCause:`n``````" >> $outFile
           foreach ($vulnerability in $vulnerabilities) {
             npm why $vulnerability | tee -a $outFile
           }
           Write-Output "``````" >> $outFile
+          $packages = "$vulnerabilities".Replace("`n", ", ")
+          Write-Output "packages=$packages" >> "$GITHUB_OUTPUT"
       - name: Fix vulnerabilities
         if: steps.audit.outputs.vulnerable == 'true'
         run: |
@@ -47,7 +49,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Security updates"
-          title: "Fix Security Vulnerabilities"
+          title: "Fix Security Vulnerabilities ${{ steps.audit.outputs.packages }}"
           body-path: "${{ runner.temp }}/audit.txt"
           base: ${{ github.ref_name }}
           branch: audit-fix/${{ github.run_id }}
+          labels: dependencies
