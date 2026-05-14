@@ -1,6 +1,14 @@
 name: Fix Audit Issues
+
 on:
   workflow_dispatch:
+    inputs:
+      create_pull_request:
+        description: 'Create a pull request with the fixes'
+        type: boolean
+        required: true
+        default: true
+
 permissions:
   contents: write
   pull-requests: write
@@ -38,13 +46,14 @@ jobs:
           }
           Write-Output "``````" >> $outFile
           $packages = "$vulnerabilities".Replace("`n", ", ")
-          Write-Output "packages=$packages" >> "$GITHUB_OUTPUT"
+          Write-Output "packages=`"$packages`"" >> "$GITHUB_OUTPUT"
       - name: Fix vulnerabilities
-        if: steps.audit.outputs.vulnerable == 'true'
+        if: steps.audit.outputs.vulnerable == 'true' && github.event.inputs.create_pull_request == 'false'
         run: |
           npm audit fix
       - name: Create Pull Request
-        if: steps.audit.outputs.vulnerable == 'true'
+        id: create_pr
+        if: steps.audit.outputs.vulnerable == 'true' && github.event.inputs.create_pull_request == 'true'
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -54,3 +63,13 @@ jobs:
           base: ${{ github.ref_name }}
           branch: audit-fix/${{ github.run_id }}
           labels: dependencies
+      - name: Report result
+        run: |
+          if [ "${{ steps.audit.outputs.vulnerable }}" == "true" ]; then
+            echo "Found vulnerabilities of following packages: ${{ steps.audit.outputs.packages }}."
+            if [ "${{ github.event.inputs.create_pull_request }}" == "true" ]; then
+              echo "Pull request created: ${{ steps.create_pr.outputs.pull-request-url }}."
+            fi
+          else
+            echo "No vulnerabilities found."
+          fi
