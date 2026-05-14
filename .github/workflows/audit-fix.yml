@@ -23,7 +23,7 @@ jobs:
         run: |
           set -o pipefail
           npm audit | tee "${{ runner.temp }}/audit.txt" || echo "vulnerable=true" >> "$GITHUB_OUTPUT"
-          npm audit --json > "${{ runner.temp }}/audit.json"
+          npm audit --json > "${{ runner.temp }}/audit.json" || echo > /dev/null
       - name: Find dependency chain
         if: steps.audit.outputs.vulnerable == 'true'
         shell: pwsh
